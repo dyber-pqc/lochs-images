@@ -1,0 +1,77 @@
+name: Build FreeBSD Images
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'FreeBSD version (e.g., 15.0, 14.2)'
+        required: true
+        default: '15.0'
+  schedule:
+    # Build weekly on Sunday at midnight
+    - cron: '0 0 * * 0'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        version: ['15.0', '14.2', '13.4']
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Build images for FreeBSD ${{ matrix.version }}
+        run: |
+          chmod +x build-images.sh
+          ./build-images.sh ${{ matrix.version }}
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: freebsd-${{ matrix.version }}-images
+          path: output/*.txz
+          
+      - name: Upload checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: freebsd-${{ matrix.version }}-checksums
+          path: output/SHA256SUMS
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ github.event.inputs.version }}
+          name: FreeBSD ${{ github.event.inputs.version }} Images
+          body: |
+            FreeBSD ${{ github.event.inputs.version }} jail images for Lochs.dev
+            
+            ## Images
+            - `freebsd-${{ github.event.inputs.version }}-full.txz` - Complete base system
+            - `freebsd-${{ github.event.inputs.version }}-minimal.txz` - Stripped (~50MB)
+            - `freebsd-${{ github.event.inputs.version }}-rescue.txz` - Rescue only (~15MB)
+            
+            ## Usage
+            ```bash
+            lochs pull freebsd:${{ github.event.inputs.version }}-minimal
+            lochs create myjail --image freebsd:${{ github.event.inputs.version }}-minimal
+            ```
+          files: |
+            artifacts/**/*.txz
+            artifacts/**/SHA256SUMS
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
