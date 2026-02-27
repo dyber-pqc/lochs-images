@@ -30,7 +30,15 @@ CACHE_FILE="${WORK_DIR}/base-${VERSION}.txz"
 if [ ! -f "${CACHE_FILE}" ]; then
     echo ""
     echo "[1/5] Downloading FreeBSD ${RELEASE} base.txz..."
-    curl -L -o "${CACHE_FILE}" "${BASE_URL}/base.txz"
+    curl -fL -o "${CACHE_FILE}" "${BASE_URL}/base.txz"
+    # Validate we got a real archive, not an HTML error page
+    if file "${CACHE_FILE}" | grep -qi 'html\|text'; then
+        echo "Error: Download returned HTML instead of an archive."
+        echo "FreeBSD ${RELEASE} may not exist on the mirror."
+        echo "Available releases: https://download.freebsd.org/releases/amd64/amd64/"
+        rm -f "${CACHE_FILE}"
+        exit 1
+    fi
 else
     echo ""
     echo "[1/5] Using cached base.txz"

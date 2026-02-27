@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'FreeBSD version (e.g., 15.0, 14.2)'
+        description: 'FreeBSD version (e.g., 15.0, 14.3, 13.5)'
         required: true
         default: '15.0'
       build_apps:
@@ -31,7 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        version: ['15.0', '14.2']
+        version: ['15.0', '14.3']
 
     steps:
       - uses: actions/checkout@v4
