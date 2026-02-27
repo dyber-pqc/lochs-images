@@ -1,0 +1,10 @@
+FROM scratch
+LABEL maintainer="dyber-pqc"
+LABEL description="FreeBSD 15.0 base system"
+LABEL version="15.0"
+
+# FreeBSD base is built from base.txz directly
+# This Lochfile is for reference and metadata only
+
+WORKDIR /
+CMD ["/bin/sh"]

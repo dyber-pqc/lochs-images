@@ -1,0 +1,34 @@
+FROM freebsd:15.0-minimal
+LABEL maintainer="dyber-pqc"
+LABEL description="nginx web server on FreeBSD"
+LABEL version="1.26"
+
+# Install nginx from FreeBSD packages
+RUN pkg install -y nginx
+
+# Create default directories
+RUN mkdir -p /var/log/nginx /var/run /usr/local/www/nginx
+
+# Default nginx config
+RUN echo 'worker_processes auto;' > /usr/local/etc/nginx/nginx.conf && \
+    echo 'events { worker_connections 1024; }' >> /usr/local/etc/nginx/nginx.conf && \
+    echo 'http {' >> /usr/local/etc/nginx/nginx.conf && \
+    echo '    include mime.types;' >> /usr/local/etc/nginx/nginx.conf && \
+    echo '    default_type application/octet-stream;' >> /usr/local/etc/nginx/nginx.conf && \
+    echo '    sendfile on;' >> /usr/local/etc/nginx/nginx.conf && \
+    echo '    keepalive_timeout 65;' >> /usr/local/etc/nginx/nginx.conf && \
+    echo '    server {' >> /usr/local/etc/nginx/nginx.conf && \
+    echo '        listen 80;' >> /usr/local/etc/nginx/nginx.conf && \
+    echo '        server_name localhost;' >> /usr/local/etc/nginx/nginx.conf && \
+    echo '        location / {' >> /usr/local/etc/nginx/nginx.conf && \
+    echo '            root /usr/local/www/nginx;' >> /usr/local/etc/nginx/nginx.conf && \
+    echo '            index index.html;' >> /usr/local/etc/nginx/nginx.conf && \
+    echo '        }' >> /usr/local/etc/nginx/nginx.conf && \
+    echo '    }' >> /usr/local/etc/nginx/nginx.conf && \
+    echo '}' >> /usr/local/etc/nginx/nginx.conf
+
+# Default index page
+RUN echo '<h1>Welcome to nginx on FreeBSD (via Lochs)</h1>' > /usr/local/www/nginx/index.html
+
+EXPOSE 80 443
+CMD ["/usr/local/sbin/nginx", "-g", "daemon off;"]

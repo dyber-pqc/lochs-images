@@ -1,0 +1,142 @@
+{
+  "registry": {
+    "name": "Lochs Official Images",
+    "url": "https://github.com/dyber-pqc/lochs-images/releases/download",
+    "api": "https://api.github.com/repos/dyber-pqc/lochs-images/releases",
+    "updated": "2026-02-27"
+  },
+  "images": {
+    "freebsd": {
+      "description": "FreeBSD base system",
+      "maintainer": "dyber-pqc",
+      "source": "https://github.com/dyber-pqc/lochs-images",
+      "versions": {
+        "15.0": {
+          "tags": ["15.0", "latest"],
+          "variants": {
+            "full": {
+              "url": "v15.0/freebsd-15.0-full.txz",
+              "size": "~163MB",
+              "description": "Complete FreeBSD base system with all utilities, docs, debug symbols"
+            },
+            "minimal": {
+              "url": "v15.0/freebsd-15.0-minimal.txz",
+              "size": "~148MB",
+              "description": "Stripped base: no docs, debug symbols, extra locales, games"
+            },
+            "rescue": {
+              "url": "v15.0/freebsd-15.0-rescue.txz",
+              "size": "~97MB",
+              "description": "Bare minimum: rescue binaries, essential libs, basic shell"
+            }
+          }
+        },
+        "14.2": {
+          "tags": ["14.2", "14-stable"],
+          "variants": {
+            "full": {
+              "url": "v14.2/freebsd-14.2-full.txz",
+              "size": "~160MB"
+            },
+            "minimal": {
+              "url": "v14.2/freebsd-14.2-minimal.txz",
+              "size": "~145MB"
+            }
+          }
+        }
+      }
+    },
+    "nginx": {
+      "description": "nginx web server on FreeBSD",
+      "maintainer": "dyber-pqc",
+      "base": "freebsd:15.0-minimal",
+      "versions": {
+        "1.26": {
+          "tags": ["1.26", "latest"],
+          "ports_package": "nginx",
+          "exposed_ports": [80, 443]
+        }
+      },
+      "status": "planned"
+    },
+    "postgresql": {
+      "description": "PostgreSQL database server on FreeBSD",
+      "maintainer": "dyber-pqc",
+      "base": "freebsd:15.0-minimal",
+      "versions": {
+        "16": {
+          "tags": ["16", "latest"],
+          "ports_package": "postgresql16-server",
+          "exposed_ports": [5432]
+        },
+        "15": {
+          "tags": ["15"],
+          "ports_package": "postgresql15-server",
+          "exposed_ports": [5432]
+        }
+      },
+      "status": "planned"
+    },
+    "redis": {
+      "description": "Redis in-memory data store on FreeBSD",
+      "maintainer": "dyber-pqc",
+      "base": "freebsd:15.0-minimal",
+      "versions": {
+        "7.2": {
+          "tags": ["7.2", "latest"],
+          "ports_package": "redis",
+          "exposed_ports": [6379]
+        }
+      },
+      "status": "planned"
+    },
+    "python": {
+      "description": "Python runtime on FreeBSD",
+      "maintainer": "dyber-pqc",
+      "base": "freebsd:15.0-minimal",
+      "versions": {
+        "3.11": {
+          "tags": ["3.11", "latest"],
+          "ports_package": "python311"
+        }
+      },
+      "status": "planned"
+    },
+    "node": {
+      "description": "Node.js runtime on FreeBSD",
+      "maintainer": "dyber-pqc",
+      "base": "freebsd:15.0-minimal",
+      "versions": {
+        "22": {
+          "tags": ["22", "lts", "latest"],
+          "ports_package": "node22"
+        }
+      },
+      "status": "planned"
+    },
+    "go": {
+      "description": "Go programming language on FreeBSD",
+      "maintainer": "dyber-pqc",
+      "base": "freebsd:15.0-minimal",
+      "versions": {
+        "1.22": {
+          "tags": ["1.22", "latest"],
+          "ports_package": "go"
+        }
+      },
+      "status": "planned"
+    },
+    "rust": {
+      "description": "Rust programming language on FreeBSD",
+      "maintainer": "dyber-pqc",
+      "base": "freebsd:15.0-minimal",
+      "versions": {
+        "1.77": {
+          "tags": ["1.77", "latest"],
+          "ports_package": "rust"
+        }
+      },
+      "status": "planned"
+    }
+  }
+}

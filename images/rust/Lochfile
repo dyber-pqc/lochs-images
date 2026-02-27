@@ -1,0 +1,16 @@
+FROM freebsd:15.0-minimal
+LABEL maintainer="dyber-pqc"
+LABEL description="Rust programming language on FreeBSD"
+LABEL version="1.77"
+
+# Install Rust toolchain
+RUN pkg install -y rust cargo
+
+# Create app directory
+RUN mkdir -p /app
+WORKDIR /app
+
+# Verify installation
+RUN rustc --version && cargo --version
+
+CMD ["/bin/sh"]

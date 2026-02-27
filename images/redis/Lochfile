@@ -1,0 +1,23 @@
+FROM freebsd:15.0-minimal
+LABEL maintainer="dyber-pqc"
+LABEL description="Redis in-memory data store on FreeBSD"
+LABEL version="7.2"
+
+# Install Redis
+RUN pkg install -y redis
+
+# Create data and config directories
+RUN mkdir -p /var/db/redis /var/run/redis /usr/local/etc/redis
+RUN chown -R redis:redis /var/db/redis /var/run/redis
+
+# Configure Redis for container use
+RUN echo 'bind 0.0.0.0' > /usr/local/etc/redis/redis.conf && \
+    echo 'port 6379' >> /usr/local/etc/redis/redis.conf && \
+    echo 'dir /var/db/redis' >> /usr/local/etc/redis/redis.conf && \
+    echo 'appendonly yes' >> /usr/local/etc/redis/redis.conf && \
+    echo 'protected-mode no' >> /usr/local/etc/redis/redis.conf && \
+    echo 'daemonize no' >> /usr/local/etc/redis/redis.conf
+
+EXPOSE 6379
+VOLUME /var/db/redis
+CMD ["/usr/local/bin/redis-server", "/usr/local/etc/redis/redis.conf"]

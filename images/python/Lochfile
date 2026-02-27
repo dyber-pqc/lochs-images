@@ -1,0 +1,19 @@
+FROM freebsd:15.0-minimal
+LABEL maintainer="dyber-pqc"
+LABEL description="Python 3.11 runtime on FreeBSD"
+LABEL version="3.11"
+
+# Install Python and common tools
+RUN pkg install -y python311 py311-pip py311-setuptools py311-wheel
+
+# Set up symlinks
+RUN ln -sf /usr/local/bin/python3.11 /usr/local/bin/python3
+RUN ln -sf /usr/local/bin/python3.11 /usr/local/bin/python
+RUN ln -sf /usr/local/bin/pip-3.11 /usr/local/bin/pip3
+RUN ln -sf /usr/local/bin/pip-3.11 /usr/local/bin/pip
+
+# Create app directory
+RUN mkdir -p /app
+WORKDIR /app
+
+CMD ["python3"]

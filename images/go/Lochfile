@@ -1,0 +1,18 @@
+FROM freebsd:15.0-minimal
+LABEL maintainer="dyber-pqc"
+LABEL description="Go programming language on FreeBSD"
+LABEL version="1.22"
+
+# Install Go
+RUN pkg install -y go
+
+# Set up Go environment
+ENV GOPATH=/go
+ENV PATH=$GOPATH/bin:/usr/local/go/bin:$PATH
+RUN mkdir -p /go/src /go/bin /go/pkg
+
+# Create app directory
+RUN mkdir -p /app
+WORKDIR /app
+
+CMD ["/usr/local/bin/go", "version"]

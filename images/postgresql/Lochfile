@@ -1,0 +1,23 @@
+FROM freebsd:15.0-minimal
+LABEL maintainer="dyber-pqc"
+LABEL description="PostgreSQL database server on FreeBSD"
+LABEL version="16"
+
+# Install PostgreSQL
+RUN pkg install -y postgresql16-server postgresql16-client
+
+# Create postgres user and data directory
+RUN pw useradd postgres -u 770 -g 770 -d /var/db/postgres -s /bin/sh -c "PostgreSQL Server" 2>/dev/null || true
+RUN mkdir -p /var/db/postgres/data16 /var/run/postgresql
+RUN chown -R postgres:postgres /var/db/postgres /var/run/postgresql
+
+# Initialize database
+RUN su -m postgres -c '/usr/local/bin/initdb -D /var/db/postgres/data16 --encoding=UTF8 --locale=C'
+
+# Allow connections from jail network
+RUN echo "host all all 0.0.0.0/0 md5" >> /var/db/postgres/data16/pg_hba.conf
+RUN echo "listen_addresses = '*'" >> /var/db/postgres/data16/postgresql.conf
+
+EXPOSE 5432
+VOLUME /var/db/postgres/data16
+CMD ["su", "-m", "postgres", "-c", "/usr/local/bin/postgres -D /var/db/postgres/data16"]

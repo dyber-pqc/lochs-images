@@ -1,0 +1,16 @@
+FROM freebsd:15.0-minimal
+LABEL maintainer="dyber-pqc"
+LABEL description="Node.js runtime on FreeBSD"
+LABEL version="22"
+
+# Install Node.js LTS and npm
+RUN pkg install -y node22 npm-node22
+
+# Create app directory
+RUN mkdir -p /app
+WORKDIR /app
+
+# Verify installation
+RUN node --version && npm --version
+
+CMD ["node"]
