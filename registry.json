@@ -31,15 +31,15 @@
             }
           }
         },
-        "14.2": {
-          "tags": ["14.2", "14-stable"],
+        "14.3": {
+          "tags": ["14.3", "14-stable"],
           "variants": {
             "full": {
-              "url": "v14.2/freebsd-14.2-full.txz",
+              "url": "v14.3/freebsd-14.3-full.txz",
               "size": "~160MB"
             },
             "minimal": {
-              "url": "v14.2/freebsd-14.2-minimal.txz",
+              "url": "v14.3/freebsd-14.3-minimal.txz",
               "size": "~145MB"
             }
           }
@@ -57,7 +57,7 @@
           "exposed_ports": [80, 443]
         }
       },
-      "status": "planned"
+      "status": "available"
     },
     "postgresql": {
       "description": "PostgreSQL database server on FreeBSD",
@@ -75,7 +75,7 @@
           "exposed_ports": [5432]
         }
       },
-      "status": "planned"
+      "status": "available"
     },
     "redis": {
       "description": "Redis in-memory data store on FreeBSD",
@@ -88,7 +88,7 @@
           "exposed_ports": [6379]
         }
       },
-      "status": "planned"
+      "status": "available"
     },
     "python": {
       "description": "Python runtime on FreeBSD",
@@ -100,7 +100,7 @@
           "ports_package": "python311"
         }
       },
-      "status": "planned"
+      "status": "available"
     },
     "node": {
       "description": "Node.js runtime on FreeBSD",
@@ -112,7 +112,7 @@
           "ports_package": "node22"
         }
       },
-      "status": "planned"
+      "status": "available"
     },
     "go": {
       "description": "Go programming language on FreeBSD",
@@ -124,7 +124,7 @@
           "ports_package": "go"
         }
       },
-      "status": "planned"
+      "status": "available"
     },
     "rust": {
       "description": "Rust programming language on FreeBSD",
@@ -136,7 +136,7 @@
           "ports_package": "rust"
         }
       },
-      "status": "planned"
+      "status": "available"
     }
   }
 }

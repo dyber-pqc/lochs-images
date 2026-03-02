@@ -6,6 +6,8 @@
 # Usage: ./build-images.sh [version]
 # Example: ./build-images.sh 15.0
 #
+# Must be run on FreeBSD with: bash, gtar (pkg install bash gtar)
+#
 
 set -e
 
@@ -16,6 +18,26 @@ BASE_URL="https://download.freebsd.org/releases/${ARCH}/${ARCH}/${RELEASE}"
 
 WORK_DIR="$(pwd)/build"
 OUTPUT_DIR="$(pwd)/output"
+
+# Use gtar if available (required on FreeBSD for xz compression)
+if command -v gtar &>/dev/null; then
+    TAR_CREATE="gtar cf - . | xz"
+    TAR_EXTRACT="tar -xJf"
+elif tar --version 2>/dev/null | grep -q GNU; then
+    TAR_CREATE="tar -cJf"
+    TAR_EXTRACT="tar -xJf"
+else
+    TAR_CREATE="tar cf - . | xz"
+    TAR_EXTRACT="tar -xJf"
+fi
+
+# Strip BSD file flags before rm (FreeBSD sets schg on system binaries)
+safe_rm() {
+    if command -v chflags &>/dev/null; then
+        chflags -R noschg "$1" 2>/dev/null || true
+    fi
+    rm -rf "$1"
+}
 
 echo "=============================================="
 echo "  Lochs Image Builder"
@@ -44,26 +66,32 @@ else
     echo "[1/5] Using cached base.txz"
 fi
 
-# Build full image (just repackaged for consistency)
+# Build full image
 echo ""
 echo "[2/5] Building freebsd:${VERSION} (full)..."
 FULL_DIR="${WORK_DIR}/full-${VERSION}"
-rm -rf "${FULL_DIR}"
+safe_rm "${FULL_DIR}"
 mkdir -p "${FULL_DIR}"
 echo "  Extracting..."
-tar -xJf "${CACHE_FILE}" -C "${FULL_DIR}"
+${TAR_EXTRACT} "${CACHE_FILE}" -C "${FULL_DIR}"
+echo "  Stripping file flags..."
+chflags -R noschg "${FULL_DIR}" 2>/dev/null || true
 echo "  Packaging..."
 cd "${FULL_DIR}"
-tar -cJf "${OUTPUT_DIR}/freebsd-${VERSION}-full.txz" .
+${TAR_CREATE} > "${OUTPUT_DIR}/freebsd-${VERSION}-full.txz"
 FULL_SIZE=$(du -sh "${OUTPUT_DIR}/freebsd-${VERSION}-full.txz" | cut -f1)
 echo "  Created: freebsd-${VERSION}-full.txz (${FULL_SIZE})"
 
-# Build minimal image
+# Build minimal image (extract fresh, don't cp -a which inflates on FreeBSD)
 echo ""
 echo "[3/5] Building freebsd:${VERSION}-minimal..."
 MINIMAL_DIR="${WORK_DIR}/minimal-${VERSION}"
-rm -rf "${MINIMAL_DIR}"
-cp -a "${FULL_DIR}" "${MINIMAL_DIR}"
+safe_rm "${MINIMAL_DIR}"
+mkdir -p "${MINIMAL_DIR}"
+echo "  Extracting fresh base..."
+${TAR_EXTRACT} "${CACHE_FILE}" -C "${MINIMAL_DIR}"
+echo "  Stripping file flags..."
+chflags -R noschg "${MINIMAL_DIR}" 2>/dev/null || true
 cd "${MINIMAL_DIR}"
 
 echo "  Removing documentation..."
@@ -74,7 +102,6 @@ echo "  Removing debug symbols..."
 rm -rf usr/lib/debug
 
 echo "  Removing non-essential locales..."
-# Keep only C and en_US
 find usr/share/locale -mindepth 1 -maxdepth 1 -type d ! -name 'C' ! -name 'en_US*' -exec rm -rf {} + 2>/dev/null || true
 
 echo "  Removing games..."
@@ -89,7 +116,7 @@ rm -rf var/db/pkg/* var/cache/* tmp/*
 rm -rf usr/share/zoneinfo/posix usr/share/zoneinfo/right
 
 echo "  Packaging..."
-tar -cJf "${OUTPUT_DIR}/freebsd-${VERSION}-minimal.txz" .
+${TAR_CREATE} > "${OUTPUT_DIR}/freebsd-${VERSION}-minimal.txz"
 MINIMAL_SIZE=$(du -sh "${OUTPUT_DIR}/freebsd-${VERSION}-minimal.txz" | cut -f1)
 echo "  Created: freebsd-${VERSION}-minimal.txz (${MINIMAL_SIZE})"
 
@@ -97,16 +124,25 @@ echo "  Created: freebsd-${VERSION}-minimal.txz (${MINIMAL_SIZE})"
 echo ""
 echo "[4/5] Building freebsd:rescue..."
 RESCUE_DIR="${WORK_DIR}/rescue-${VERSION}"
-rm -rf "${RESCUE_DIR}"
-mkdir -p "${RESCUE_DIR}"
+safe_rm "${RESCUE_DIR}"
 
-# Extract only essential directories
+# Create directory structure (no brace expansion for sh compatibility)
+mkdir -p "${RESCUE_DIR}/bin"
+mkdir -p "${RESCUE_DIR}/sbin"
+mkdir -p "${RESCUE_DIR}/lib"
+mkdir -p "${RESCUE_DIR}/libexec"
+mkdir -p "${RESCUE_DIR}/etc"
+mkdir -p "${RESCUE_DIR}/tmp"
+mkdir -p "${RESCUE_DIR}/var"
+mkdir -p "${RESCUE_DIR}/root"
+mkdir -p "${RESCUE_DIR}/rescue"
+mkdir -p "${RESCUE_DIR}/usr/bin"
+mkdir -p "${RESCUE_DIR}/usr/sbin"
+mkdir -p "${RESCUE_DIR}/usr/lib"
+mkdir -p "${RESCUE_DIR}/usr/libexec"
+
 cd "${FULL_DIR}"
 echo "  Copying rescue utilities..."
-
-# Create directory structure
-mkdir -p "${RESCUE_DIR}"/{bin,sbin,lib,libexec,etc,tmp,var,root,rescue}
-mkdir -p "${RESCUE_DIR}"/usr/{bin,sbin,lib,libexec}
 
 # Copy rescue binaries (statically linked)
 if [ -d "rescue" ]; then
@@ -116,7 +152,6 @@ fi
 # Copy essential binaries
 for bin in sh ls cat cp mv rm mkdir rmdir chmod chown ln pwd echo sleep; do
     [ -f "bin/${bin}" ] && cp -a "bin/${bin}" "${RESCUE_DIR}/bin/"
-    [ -f "rescue/${bin}" ] && cp -a "rescue/${bin}" "${RESCUE_DIR}/bin/${bin}.static"
 done
 
 for sbin in init mount umount reboot halt fsck mdconfig; do
@@ -124,22 +159,18 @@ for sbin in init mount umount reboot halt fsck mdconfig; do
 done
 
 # Copy essential libraries
-cp -a lib/libc.so* "${RESCUE_DIR}/lib/" 2>/dev/null || true
-cp -a lib/libthr.so* "${RESCUE_DIR}/lib/" 2>/dev/null || true
-cp -a lib/libm.so* "${RESCUE_DIR}/lib/" 2>/dev/null || true
-cp -a lib/libutil.so* "${RESCUE_DIR}/lib/" 2>/dev/null || true
-cp -a lib/libcrypt.so* "${RESCUE_DIR}/lib/" 2>/dev/null || true
-cp -a lib/libncursesw.so* "${RESCUE_DIR}/lib/" 2>/dev/null || true
+for lib in libc.so* libthr.so* libm.so* libutil.so* libcrypt.so* libsys.so* libncursesw.so*; do
+    cp -a lib/${lib} "${RESCUE_DIR}/lib/" 2>/dev/null || true
+done
 cp -a libexec/ld-elf.so* "${RESCUE_DIR}/libexec/" 2>/dev/null || true
 
-# Copy minimal etc
-cp -a etc/passwd etc/group etc/shells etc/login.conf "${RESCUE_DIR}/etc/" 2>/dev/null || true
+# Minimal etc
 echo "root::0:0::0:0:Charlie &:/root:/bin/sh" > "${RESCUE_DIR}/etc/passwd"
 echo "wheel:*:0:root" > "${RESCUE_DIR}/etc/group"
 
 cd "${RESCUE_DIR}"
 echo "  Packaging..."
-tar -cJf "${OUTPUT_DIR}/freebsd-${VERSION}-rescue.txz" .
+${TAR_CREATE} > "${OUTPUT_DIR}/freebsd-${VERSION}-rescue.txz"
 RESCUE_SIZE=$(du -sh "${OUTPUT_DIR}/freebsd-${VERSION}-rescue.txz" | cut -f1)
 echo "  Created: freebsd-${VERSION}-rescue.txz (${RESCUE_SIZE})"
 

@@ -8,8 +8,9 @@
 #          ./build-app-images.sh all
 #
 # Prerequisites:
-#   - BSDulator must be built and available as ./bsdulator or in PATH
-#   - FreeBSD base image must exist (run build-images.sh first)
+#   - Must be run on FreeBSD as root
+#   - Run build-images.sh first (or have base-15.0.txz in build/)
+#   - pkg install bash gtar
 #
 
 set +e
@@ -19,6 +20,7 @@ IMAGES_DIR="${SCRIPT_DIR}/images"
 BUILD_DIR="${SCRIPT_DIR}/build"
 OUTPUT_DIR="${SCRIPT_DIR}/output"
 BASE_VERSION="15.0"
+BASE_TXZ="${BUILD_DIR}/base-${BASE_VERSION}.txz"
 
 # Colors
 RED='\033[0;31m'
@@ -33,6 +35,26 @@ SKIPPED=0
 
 # All available application images
 ALL_IMAGES="nginx postgresql redis python node go rust"
+
+# Use gtar piped to xz (reliable on FreeBSD)
+compress_image() {
+    local src_dir="$1"
+    local outfile="$2"
+    cd "${src_dir}"
+    if command -v gtar &>/dev/null; then
+        gtar cf - . | xz > "${outfile}"
+    else
+        tar cf - . | xz > "${outfile}"
+    fi
+}
+
+# Strip BSD file flags before rm
+safe_rm() {
+    if command -v chflags &>/dev/null; then
+        chflags -R noschg "$1" 2>/dev/null || true
+    fi
+    rm -rf "$1"
+}
 
 usage() {
     echo "Lochs Application Image Builder"
@@ -53,47 +75,35 @@ usage() {
     done
     echo ""
     echo "Prerequisites:"
-    echo "  1. Run './build-images.sh ${BASE_VERSION}' first to create base images"
-    echo "  2. BSDulator must be available (run 'make' in the bsdulator repo)"
+    echo "  1. Must be run on FreeBSD as root"
+    echo "  2. pkg install bash gtar"
+    echo "  3. Run './build-images.sh ${BASE_VERSION}' first (or have base-${BASE_VERSION}.txz)"
 }
 
 check_prerequisites() {
     echo -e "${BLUE}[Prerequisites]${NC}"
 
-    # Check for base image
-    BASE_DIR="${BUILD_DIR}/minimal-${BASE_VERSION}"
-    if [ ! -d "${BASE_DIR}" ]; then
-        BASE_ARCHIVE="${OUTPUT_DIR}/freebsd-${BASE_VERSION}-minimal.txz"
-        if [ -f "${BASE_ARCHIVE}" ]; then
-            echo "  Extracting base image..."
-            mkdir -p "${BASE_DIR}"
-            tar -xJf "${BASE_ARCHIVE}" -C "${BASE_DIR}"
-        else
-            echo -e "  ${RED}Error: FreeBSD base image not found.${NC}"
-            echo "  Run './build-images.sh ${BASE_VERSION}' first."
-            return 1
-        fi
+    # Check for base archive
+    if [ ! -f "${BASE_TXZ}" ]; then
+        echo -e "  ${RED}Error: ${BASE_TXZ} not found.${NC}"
+        echo "  Run './build-images.sh ${BASE_VERSION}' first."
+        return 1
     fi
-    echo -e "  ${GREEN}✓${NC} FreeBSD ${BASE_VERSION} base image ready"
-
-    # Check for bsdulator
-    BSDULATOR=""
-    if [ -x "${SCRIPT_DIR}/../bsdulator" ]; then
-        BSDULATOR="${SCRIPT_DIR}/../bsdulator"
-    elif command -v bsdulator &>/dev/null; then
-        BSDULATOR="$(command -v bsdulator)"
-    fi
-
-    if [ -n "${BSDULATOR}" ]; then
-        echo -e "  ${GREEN}✓${NC} BSDulator found: ${BSDULATOR}"
-    else
-        echo -e "  ${YELLOW}⚠${NC} BSDulator not found - will use chroot method instead"
-    fi
+    echo -e "  ${GREEN}✓${NC} FreeBSD ${BASE_VERSION} base archive found"
 
     # Check for root (needed for chroot/pkg install)
-    if [ "$EUID" -ne 0 ]; then
-        echo -e "  ${YELLOW}⚠${NC} Not running as root - some builds may fail"
+    if [ "$(id -u)" -ne 0 ]; then
+        echo -e "  ${RED}Error: Must be run as root (chroot requires it)${NC}"
         echo "  Run with: sudo $0 $*"
+        return 1
+    fi
+    echo -e "  ${GREEN}✓${NC} Running as root"
+
+    # Check for gtar
+    if ! command -v gtar &>/dev/null; then
+        echo -e "  ${YELLOW}⚠${NC} gtar not found, using tar (install gtar for reliable xz compression)"
+    else
+        echo -e "  ${GREEN}✓${NC} gtar found"
     fi
 
     return 0
@@ -118,19 +128,28 @@ build_image() {
     echo -e "${BLUE}  ${desc}${NC}"
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
-    # Create image build directory from base
+    # Create image build directory - extract fresh from base (don't cp -a)
     local img_build="${BUILD_DIR}/app-${name}"
-    rm -rf "${img_build}"
-    echo "  Copying base image..."
-    cp -a "${BUILD_DIR}/minimal-${BASE_VERSION}" "${img_build}"
+    safe_rm "${img_build}"
+    mkdir -p "${img_build}"
+    echo "  Extracting fresh base..."
+    tar -xJf "${BASE_TXZ}" -C "${img_build}"
+    chflags -R noschg "${img_build}" 2>/dev/null || true
+
+    # Strip to minimal before installing packages
+    echo "  Stripping base to minimal..."
+    rm -rf "${img_build}/usr/share/doc" "${img_build}/usr/share/man"
+    rm -rf "${img_build}/usr/share/info" "${img_build}/usr/share/examples"
+    rm -rf "${img_build}/usr/lib/debug" "${img_build}/usr/include/c++"
+    rm -rf "${img_build}/usr/share/nls" "${img_build}/usr/games"
+    rm -rf "${img_build}/usr/share/games"
+    rm -rf "${img_build}/usr/share/zoneinfo/posix" "${img_build}/usr/share/zoneinfo/right"
 
     # Parse and execute RUN commands from Lochfile
     echo "  Executing Lochfile commands..."
     local run_count=0
-    local failed=0
 
     while IFS= read -r line; do
-        # Skip comments, empty lines, and non-RUN directives
         line=$(echo "$line" | sed 's/^[[:space:]]*//')
         case "$line" in
             RUN\ *)
@@ -138,24 +157,18 @@ build_image() {
                 ((run_count++))
                 echo -e "  [${run_count}] ${cmd:0:72}..."
 
-                # Execute in chroot
-                if [ "$EUID" -eq 0 ]; then
-                    # Mount necessary filesystems for pkg
-                    mount -t devfs devfs "${img_build}/dev" 2>/dev/null
-                    cp /etc/resolv.conf "${img_build}/etc/resolv.conf" 2>/dev/null
+                # Mount necessary filesystems for pkg
+                mount -t devfs devfs "${img_build}/dev" 2>/dev/null
+                cp /etc/resolv.conf "${img_build}/etc/resolv.conf" 2>/dev/null
 
-                    chroot "${img_build}" /bin/sh -c "${cmd}" > /dev/null 2>&1
-                    local rc=$?
+                chroot "${img_build}" /bin/sh -c "${cmd}"
+                local rc=$?
 
-                    umount "${img_build}/dev" 2>/dev/null
-                    rm -f "${img_build}/etc/resolv.conf"
+                umount "${img_build}/dev" 2>/dev/null
+                rm -f "${img_build}/etc/resolv.conf"
 
-                    if [ $rc -ne 0 ]; then
-                        echo -e "    ${YELLOW}⚠ Command returned exit code ${rc} (may be OK)${NC}"
-                    fi
-                else
-                    echo -e "    ${YELLOW}⚠ Skipped (requires root)${NC}"
-                    failed=1
+                if [ $rc -ne 0 ]; then
+                    echo -e "    ${YELLOW}⚠ Command returned exit code ${rc}${NC}"
                 fi
                 ;;
             EXPOSE\ *)
@@ -170,19 +183,22 @@ build_image() {
         esac
     done < "${lochfile}"
 
-    if [ $failed -eq 1 ] && [ "$EUID" -ne 0 ]; then
-        echo -e "  ${YELLOW}⚠${NC} Skipped package installation (need root)"
-        echo "  Creating skeleton image with Lochfile metadata only..."
-    fi
+    # Clean up pkg cache inside image
+    rm -rf "${img_build}/var/cache/pkg/"*
+    rm -rf "${img_build}/var/db/pkg/repos/"*
+    rm -rf "${img_build}/tmp/"*
 
     # Copy Lochfile into image for metadata
     cp "${lochfile}" "${img_build}/.lochfile"
 
+    # Check size before compression
+    local dir_size=$(du -sh "${img_build}" | cut -f1)
+    echo "  Image dir size: ${dir_size}"
+
     # Package the image
-    echo "  Packaging..."
-    cd "${img_build}"
-    local outfile="${OUTPUT_DIR}/${name}-${version}-freebsd${BASE_VERSION}.txz"
-    tar -cJf "${outfile}" . 2>/dev/null
+    echo "  Compressing (this takes a few minutes)..."
+    local outfile="${OUTPUT_DIR}/${name}-latest-freebsd${BASE_VERSION}.txz"
+    compress_image "${img_build}" "${outfile}"
     local img_size=$(du -sh "${outfile}" | cut -f1)
 
     echo -e "  ${GREEN}✓${NC} Created: $(basename ${outfile}) (${img_size})"
