@@ -6,7 +6,8 @@
 # Usage: ./build-images.sh [version]
 # Example: ./build-images.sh 15.0
 #
-# Must be run on FreeBSD with: bash, gtar (pkg install bash gtar)
+# On FreeBSD: pkg install bash gtar
+# On Linux (CI): works with GNU tar out of the box
 #
 
 set -e
@@ -19,17 +20,27 @@ BASE_URL="https://download.freebsd.org/releases/${ARCH}/${ARCH}/${RELEASE}"
 WORK_DIR="$(pwd)/build"
 OUTPUT_DIR="$(pwd)/output"
 
-# Use gtar if available (required on FreeBSD for xz compression)
-if command -v gtar &>/dev/null; then
-    TAR_CREATE="gtar cf - . | xz"
-    TAR_EXTRACT="tar -xJf"
-elif tar --version 2>/dev/null | grep -q GNU; then
-    TAR_CREATE="tar -cJf"
-    TAR_EXTRACT="tar -xJf"
-else
-    TAR_CREATE="tar cf - . | xz"
-    TAR_EXTRACT="tar -xJf"
-fi
+# Create a compressed .txz archive from the current directory
+# Works on both Linux (GNU tar) and FreeBSD (gtar or bsdtar + xz)
+create_txz() {
+    local outfile="$1"
+    if command -v gtar &>/dev/null; then
+        gtar cf - . | xz > "${outfile}"
+    elif tar --version 2>/dev/null | grep -q GNU; then
+        tar -cJf "${outfile}" .
+    else
+        tar cf - . | xz > "${outfile}"
+    fi
+}
+
+# Extract a .txz archive, suppressing FreeBSD SCHILY.fflags warnings
+extract_txz() {
+    local archive="$1"
+    local dest="$2"
+    tar -xJf "${archive}" -C "${dest}" --warning=no-unknown-keyword 2>/dev/null || \
+    tar -xJf "${archive}" -C "${dest}" 2>/dev/null || \
+    tar -xJf "${archive}" -C "${dest}"
+}
 
 # Strip BSD file flags before rm (FreeBSD sets schg on system binaries)
 safe_rm() {
@@ -37,6 +48,13 @@ safe_rm() {
         chflags -R noschg "$1" 2>/dev/null || true
     fi
     rm -rf "$1"
+}
+
+# Strip BSD file flags on a directory (no-op on Linux)
+strip_flags() {
+    if command -v chflags &>/dev/null; then
+        chflags -R noschg "$1" 2>/dev/null || true
+    fi
 }
 
 echo "=============================================="
@@ -73,25 +91,23 @@ FULL_DIR="${WORK_DIR}/full-${VERSION}"
 safe_rm "${FULL_DIR}"
 mkdir -p "${FULL_DIR}"
 echo "  Extracting..."
-${TAR_EXTRACT} "${CACHE_FILE}" -C "${FULL_DIR}"
-echo "  Stripping file flags..."
-chflags -R noschg "${FULL_DIR}" 2>/dev/null || true
+extract_txz "${CACHE_FILE}" "${FULL_DIR}"
+strip_flags "${FULL_DIR}"
 echo "  Packaging..."
 cd "${FULL_DIR}"
-${TAR_CREATE} > "${OUTPUT_DIR}/freebsd-${VERSION}-full.txz"
+create_txz "${OUTPUT_DIR}/freebsd-${VERSION}-full.txz"
 FULL_SIZE=$(du -sh "${OUTPUT_DIR}/freebsd-${VERSION}-full.txz" | cut -f1)
 echo "  Created: freebsd-${VERSION}-full.txz (${FULL_SIZE})"
 
-# Build minimal image (extract fresh, don't cp -a which inflates on FreeBSD)
+# Build minimal image (extract fresh from base, don't cp -a)
 echo ""
 echo "[3/5] Building freebsd:${VERSION}-minimal..."
 MINIMAL_DIR="${WORK_DIR}/minimal-${VERSION}"
 safe_rm "${MINIMAL_DIR}"
 mkdir -p "${MINIMAL_DIR}"
 echo "  Extracting fresh base..."
-${TAR_EXTRACT} "${CACHE_FILE}" -C "${MINIMAL_DIR}"
-echo "  Stripping file flags..."
-chflags -R noschg "${MINIMAL_DIR}" 2>/dev/null || true
+extract_txz "${CACHE_FILE}" "${MINIMAL_DIR}"
+strip_flags "${MINIMAL_DIR}"
 cd "${MINIMAL_DIR}"
 
 echo "  Removing documentation..."
@@ -116,7 +132,7 @@ rm -rf var/db/pkg/* var/cache/* tmp/*
 rm -rf usr/share/zoneinfo/posix usr/share/zoneinfo/right
 
 echo "  Packaging..."
-${TAR_CREATE} > "${OUTPUT_DIR}/freebsd-${VERSION}-minimal.txz"
+create_txz "${OUTPUT_DIR}/freebsd-${VERSION}-minimal.txz"
 MINIMAL_SIZE=$(du -sh "${OUTPUT_DIR}/freebsd-${VERSION}-minimal.txz" | cut -f1)
 echo "  Created: freebsd-${VERSION}-minimal.txz (${MINIMAL_SIZE})"
 
@@ -170,7 +186,7 @@ echo "wheel:*:0:root" > "${RESCUE_DIR}/etc/group"
 
 cd "${RESCUE_DIR}"
 echo "  Packaging..."
-${TAR_CREATE} > "${OUTPUT_DIR}/freebsd-${VERSION}-rescue.txz"
+create_txz "${OUTPUT_DIR}/freebsd-${VERSION}-rescue.txz"
 RESCUE_SIZE=$(du -sh "${OUTPUT_DIR}/freebsd-${VERSION}-rescue.txz" | cut -f1)
 echo "  Created: freebsd-${VERSION}-rescue.txz (${RESCUE_SIZE})"
 
