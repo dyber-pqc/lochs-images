@@ -21,6 +21,7 @@ on:
       - 'build-images.sh'
       - 'build-app-images.sh'
       - 'registry.json'
+      - '.github/workflows/build-images.yml'
 
 permissions:
   contents: write
